@@ -1,0 +1,225 @@
+\documentclass[11pt]{amsart}
+
+% Standard letter size paper with 1inch margins
+\usepackage[letterpaper, margin=1in]{geometry}
+
+% Useful packages 
+\usepackage{amsmath, amssymb, amsthm, amsaddr}
+\usepackage{enumerate, subcaption, graphicx, hyperref}
+
+
+\title{AMATH 482/582: Homework 1}
+\author{Jonathan McCormack}
+\address{Applied Mathematics Department, University of Washington, Seattle, WA 
+\\jrmack20@uw.edu}
+\date{\today}
+
+\begin{document}
+
+\maketitle 
+
+\begin{abstract}
+    Underwater movements of a submarine can be tracked if it emits a unique 
+    frequency that influences the submarine's surrounding acoustic pressure. 
+    Acoustic pressure data collected over 24 hours in the Puget Sound was analyzed 
+    using the Fast Fourier Transform to identify the most dominant frequency present. 
+    A Gaussian filter was applied to eliminate noise surrounding this center frequency and
+    then the data was inverse transformed back into the spatial domain to plot the location 
+    of the center frequency's source. This process can be incredibly useful in identifying key
+    features of a system and its interactions with its surroundings.
+\end{abstract}
+
+\section{Introduction and Overview}\label{sec:Introduction}
+
+Given 3-dimensional acoustic pressure data from a region of the Puget Sound over a 24-hour period, 
+we intend to track the movements of an unknown submarine. We have no information about the submarine’s 
+component equipment and its cumulative acoustic signature. However, the submarine’s signature frequency 
+will influence the acoustic pressure underwater and will naturally propagate away from the submarine with 
+decreasing amplitude. Therefore, identifying the location of the highest amplitude of the signature frequency 
+will inherently locate the precise location of the submarine.\\
+
+We intend to use the Fast Fourier Transform (FFT) to identify the submarine’s signature frequency. 
+The FFT relates frequencies to their prominence (amplitude) in a N-dimensional space at a point in time. 
+We can apply a Gaussian filter to remove unwanted frequencies (i.e., noise) 
+from the FFT to produce a clean signal which only communicates information from the signature frequency. 
+This clean signal can be inverse transformed to reveal the location of the submarine in the spatial domain. 
+
+\section{Theoretical Background}\label{sec:Theory}
+
+The Fourier Transform converts a continuous signal function of time into a function of frequency 
+represented by a sum of sine and cosine basis functions\cite{kutzdata}. The Fourier Transform can be extended 
+as needed to evaluate a signal in N-dimensional space. The Fourier Transform can also be 
+inverted to return the amplitude as a function of time rather than as a function of frequency using 
+the Inverse Fourier Transform. The below equations are the 1-dimensional 
+forward\eqref{equ:forward-fourier-integral} and 
+inverse\eqref{equ:inverse-fourier-integral} Fourier Transforms respectively.
+
+\begin{equation}
+    F(k) = \frac{1}{\sqrt{2\pi}} \int_{-\infty}^{\infty} f(t) e^{-\mathrm{i}kt} \mathrm{d}t
+    \label{equ:forward-fourier-integral}
+\end{equation}
+
+\begin{equation}
+    f(t) = \frac{1}{\sqrt{2\pi}} \int_{-\infty}^{\infty} F(k) e^{\mathrm{i}kt} \mathrm{d}k
+    \label{equ:inverse-fourier-integral}
+\end{equation}
+
+Similarly, the Discrete Fourier Transform (DFT) applies the Fourier Transform to discrete signal date.
+This is useful because unlike known signal functions that can be evaluated analytically, real-world data
+always includes a discrete sampling rate. The below equations are the 1-dimensional\eqref{equ:discrete-fourier-transform}
+and 3-dimensional\eqref{equ:3D-discrete-fourier-transform} DFT functions respectively.
+
+\begin{equation}
+    F[k] = \frac{1}{N} \sum_{n=0}^{N-1} f(x_n) e^{-\frac{\mathrm{i} 2 \pi k n}{N}} 
+    \label{equ:discrete-fourier-transform}
+\end{equation}
+
+\begin{equation}
+    F[K] = \frac{1}{N_xN_yN_z}\sum_{n_x=0}^{N_x-1}\sum_{n_y=0}^{N_y-1}\sum_{n_z=0}^{N_z-1} f(x_n,y_n,z_n) e^{-(\frac{\mathrm{i} 2 \pi k n_x}{N_x})-(\frac{\mathrm{i} 2 \pi k n_y}{N_y})}-(\frac{\mathrm{i} 2 \pi k n_z}{N_z}) 
+    \label{equ:3D-discrete-fourier-transform}
+\end{equation}
+
+The FFT is the algorithm invented by John W. Tukey and James W. Cooley in the 1960s to quickly calculate the DFT. 
+This is done by separating even signals from odd signals to reduce the total number of calculations. 
+The FFT costs computations in the order of $Nlog(N)$, whereas the DFT costs significantly more computations 
+in the order of $N^2$. Similarly to the Fourier Transform, the FFT can be inverted. After using the FFT, 
+we reorder the even and odd signals by using the FFT shift function. FFT shift improves visualization by 
+centering the FFT on the zero frequency.\\
+
+The Gaussian filter is a simple function applied to data in the fourier domain to remove noise. It does this by 
+applying a bell curve centered on the signal of interest $k_0$ and eliminating all frequencies outside of a 
+standard deviation denoted by $\sigma$. To apply the Gaussian filter, the equation is solved for every value of 
+k in the fourier domain mesh grid. Then the resulting array is multiplied element wise with the unfiltered FFT data.
+The filtered data is unshifted with the IFFT shift and then inverse transformed with IFFT. 
+This process is conducted at every time point independently. The below equations are the 
+1-dimensional\eqref{eq:gaussian-filter} and 3-dimensional\eqref{eq:3D-gaussian-filter} Gaussian filters respectively.
+
+\begin{equation}
+      g(kx) = e^\frac{(kx-kx_0)^2}{2\sigma^2}
+      \label{eq:gaussian-filter}
+\end{equation}
+
+\begin{equation}
+      g(kx, ky, kz) = e^\frac{(kx-kx_0)^2+(ky-ky_0)^2+(kz-kz_0)^2}{2\sigma^2}
+      \label{eq:3D-gaussian-filter}
+\end{equation}
+
+\section{Algorithm Implementation and Development}\label{sec:Algorithms}
+
+The data was provided as a 262,144x49 array where each column was a flattened 64x64x64 vector representing
+3-dimensional data at a single time point. The data was neither normalized nor did we receive information on 
+the sensing equipments observable range. The code was written in Python using the pathlib, Numpy, Matplotlib, 
+and Scipy libraries. The below pseudocode summarizes the general process of identifying the signature frequency, 
+filtering the data using the Gaussian filter centered on the signature frequency, and locating the submarine by 
+inverse transforming the filtered data at each time point.\\
+
+\textbf{Pseudocode}
+\begin{enumerate}
+   \item Find the signature frequency:
+   \begin{itemize}
+     \item Reshape the flattened data for each time point into a 64x64x64 array
+     \item Apply the N-dimensional FFT and FFT shift
+     \item Sum the FFT arrays and find the time-averaged FFT
+     \item Identify the most prominant frequencies in all 3 dimensions
+   \end{itemize}
+   \item Create the Gaussian Filter using the signature frequencies
+   \item Identify the location of the submarine:
+   \begin{itemize}
+    \item Reshape the flattened data for each time point into a 64x64x64 array
+    \item Apply the N-dimensional FFT and FFT shift
+    \item Multiply the resultant array by the Gaussian filter array
+    \item Apply the IFFT shift and the N-dimensional IFFT
+    \item Identify the spatial position of the most prominant data point
+   \end{itemize}
+\end{enumerate}
+
+\section{Computational Results}\label{sec:results}
+
+Using the unfiltered, time-averaged data from the FFT, the signature frequency was detected 
+\autoref{tab:Signature-frequencies}. The unfiltered data is noisy as shown below in the kz=0 
+cross sections in \autoref{fig:Filtered-FFT-cross-section}. \autoref{fig:Filtered-FFT-cross-section} 
+also includes the same cross section at kz=0 when the Gaussian filter is applied using $\sigma =$ 1, 2, and 3. 
+Because the higher values of sigma obscure the central frequency, we used sigma = 1 for the Gaussian Filter 
+when plotting the submarine’s path.\\
+
+\begin{table}[h]
+    \centering
+    \begin{tabular}{|c|c|}
+         \hline
+         Coordinate plane & Signature frequency \\ \hline
+         kx & -5.341 \\ 
+         ky & -2.199 \\
+         kz & 6.912 \\ \hline
+    \end{tabular}
+    \caption{Signature frequencies emitted by the submarine in the 3D frequency domain.}
+    \label{tab:Signature-frequencies}
+\end{table}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.5\textwidth]{Figure1.png}
+    \caption{Graphs of the time-averaged amplitude of FFT at kz=0. The top left graph is 
+    unfiltered. The unfiltered graph has no clearly discernable peaks and clearly has noise.
+    The remaining graphs apply Gaussian filters centered at the signature frequency
+    using $\sigma =$ 1, 2, and 3.}
+    \label{fig:Filtered-FFT-cross-section}
+\end{figure}
+
+Using the Inverse FFT on the filtered data at the first and last time point, 
+we returned the following coordinate tuples.\\
+
+\begin{table}[h]
+    \centering
+    \begin{tabular}{|c|c|c|}
+         \hline
+         Coordinate plane & Start point & End point \\ \hline
+         x & 2.92 & -5.08 \\ 
+         y & -7.85 & 6.00 \\
+         z & -0.15 & 0.77 \\ \hline
+    \end{tabular}
+    \caption{Submarine start and end points}
+    \label{tab:Submarine-Location}
+\end{table}
+
+The 3-dimensional path of the submarine during the 24-hour period is shown below in Figure 2. The path 
+using the noisy (unfiltered) data is red; and the filtered path is green. There are two clearly 
+visible outliers effectively removed by the Gaussian filter, showing its effectiveness at removing unwanted 
+noise from the data.The x,y coordinates of the submarine are shown below in Figure 3. This 2-dimensional 
+path provides aircraft the ability to overfly and potentially observe the submarine.\\
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.4\textwidth]{Figure2.png}
+    \caption{3D submarine path using unfiltered (red) and filtered (green) data.}
+    \label{fig:3D-Submarine-Path}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.4\textwidth]{Figure3.png}
+    \caption{2D submarine path in the xy-plane showing the overhead view.}
+    \label{fig:2D-Submarine-Path}
+\end{figure}
+
+\section{Summary and Conclusions}\label{sec:conclusions}
+
+Given noisy 3-dimensional acoustic pressure data, the path of the submarine and the submarine's 
+signature frequencies were clearly determined using the Fast Fourier Transform and the Gaussian filter.
+The method eliminated clear outliers showing the effectiveness of the method.\\
+
+Future improvements to the method should be focused on using knowledge about the sensing equipment to remove bad
+data that is outside the sensitivity of the equipment and normalizing the data using baseline acoustic pressure information.
+Additionally, the signature frequency should converted to Hertz adn be compared to known submarine signature frequencies to
+inform data filtering methods. Lastly, a more robust filter should be added to separate direction frequencies (e.g., tail fins) 
+from omnidirectional frequencies (e.g., communication equipment). This could improve the predictive nature of submarine
+movement detection.
+
+\section*{Acknowledgements}
+
+I would like to thank my classmate Samuilad for our discussions about scientific computing and data analysis. 
+I would also like to thank Professor Hosseini for his lectures, notes, and code examples.
+
+\bibliographystyle{abbrv}
+\bibliography{AMATH_582_HW1_references}
+
+\end{document}
